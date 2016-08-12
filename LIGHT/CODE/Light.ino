@@ -6,11 +6,10 @@
 #define LED 13
 #define MAX_BRIGHT 200
 
-enum SPEED{
-  ZERO = 30,
-  SLOW = 20,
-  MEDIUM = 10,
-  FAST = 2
+enum MODES{
+  SOLID,
+  SPARKLE,
+  LP_MODE
 };
 
 enum BRIGHT{
@@ -28,15 +27,23 @@ enum COLORS{
   BLUE
 };
 
-enum MODES{
-  SOLID,
-  SPARKLE
+enum SPEED{
+  ZERO = 30,
+  SLOW = 20,
+  MEDIUM = 10,
+  FAST = 3
 };
 
-SPEED curSpeed = ZERO;
 BRIGHT curBright = OFF;
-COLORS curColor = RED;
 MODES curState = SOLID;
+COLORS curColor = RED;
+SPEED curSpeed = ZERO;
+byte curOption = 0;
+
+MODES lstState = SOLID;
+byte numOptions = 0;
+bool direction = true;
+
 byte tmpColor[3]={0,0,0};
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(18, 12,  NEO_GRB + NEO_KHZ800);
 QuadController control = QuadController(14,15,18,19);
@@ -53,8 +60,8 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   unsigned long curTime = millis();
+  
   control.update();
-
   updateStateMachine();
   updatePixels();
   
@@ -69,6 +76,25 @@ void loop() {
 void updatePixels(){
 
   switch(curState){
+    case LP_MODE: // next switch statement inside to control behavior based on lstState
+      tmpColor[0] = MAX_BRIGHT;
+      tmpColor[1] = 0;
+      tmpColor[2] = 0;
+      if((millis()/1000)%2){ // V
+        strip.setPixelColor(0, tmpColor[0], tmpColor[1], tmpColor[2]);
+        strip.setPixelColor(1, tmpColor[0], tmpColor[1], tmpColor[2]);
+        strip.setPixelColor(2, tmpColor[0], tmpColor[1], tmpColor[2]);
+        strip.setPixelColor(6, 0, 0, 0);
+        strip.setPixelColor(12, 0, 0, 0);
+      }
+      else{ // H
+        strip.setPixelColor(0, tmpColor[0], tmpColor[1], tmpColor[2]);
+        strip.setPixelColor(6, tmpColor[0], tmpColor[1], tmpColor[2]);
+        strip.setPixelColor(12, tmpColor[0], tmpColor[1], tmpColor[2]);    
+        strip.setPixelColor(1, 0, 0, 0);
+        strip.setPixelColor(2, 0, 0, 0);  
+      }
+      break;
     case SPARKLE:
       tmpColor[0] = 3*sqrt(curBright);
       tmpColor[1] = 3*sqrt(curBright);
@@ -109,8 +135,8 @@ void updatePixels(){
       }
       break;
   }
-  strip.show();
   
+  strip.show();
 
 }
 
@@ -143,14 +169,25 @@ void updateStateMachine(){
   }
   
   button_state modeState = control.getButton(1);
-  if(modeState==SHORT_PRESS){
-    switch(curState){
-      case SOLID:
-        curState = SPARKLE;
-        break;
-      case SPARKLE:
-        curState = SOLID;
-        break;
+  if(curState == LP_MODE){ // if we are in LONG_PRESS mode
+    if(!control.getPress(1)){ // and the button is no longer pressed
+      curState = lstState; // go back to the last state
+    }
+  }
+  else{ // if the machine is NOT in LONG_PRESS mode
+    if(modeState==SHORT_PRESS){ // check for a short press, and cycle states if found
+      switch(curState){
+        case SOLID:
+          curState = SPARKLE;
+          break;
+        case SPARKLE:
+          curState = SOLID;
+          break;
+      }
+    }
+    else if(modeState == LONG_PRESS){ // check for a long press, and enter LONG_PRESS mode if found
+      lstState = curState; // save the current state
+      curState = LP_MODE; // then enter LONG_PRESS mode
     }
   }
   
